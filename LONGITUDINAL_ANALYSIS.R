@@ -197,9 +197,10 @@ length(setdiff(subset$alleles[[5]], c(subset$alleles[[4]], subset$alleles[[3]], 
 # Plot cumsums
 csplot <- ggplot(allele_Accumulation, aes(x = Visita, y = cumsum_diff_from_previous_counts, group = `Numero de estudo`, color = `Numero de estudo`)) +
   geom_line(linewidth = 1.2, alpha = 0.5) +
-  labs(x = "Visit", y = "Cumulative Difference from Previous Counts", title = "Cumulative Difference from Previous Counts for Each Numero de Estudo") +
-  theme_minimal()+
-  guides(color =F)
+  labs(x = "Visit", y = "Allele Accumulation Throughout Visits", title = "") +
+  theme_minimal() +
+  guides(color = FALSE) +
+  facet_wrap(~`Numero de estudo`, ncol = 15)
 
 csplot
 
