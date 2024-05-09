@@ -184,14 +184,25 @@ cs <- allele_Accumulation %>%
 allele_Accumulation <- cbind(allele_Accumulation, cumsum_diff_from_previous_counts = cs$cumsum_diff_from_previous_counts)
 
 
-#cumulative check by hand for "ASINT2-0002". is it equal to the loop? YES
-subset <- unique_alleles[unique_alleles$`Numero de estudo` == participants[1], ]
+#categorize infections
+infection_results <- allele_Accumulation %>%
+  group_by(`Numero de estudo`) %>%
+  summarize(infection_status = ifelse(sum(diff_from_previous_counts) > 0, "NEW_INFECTION", "same_infection"))
 
-length(setdiff(subset$alleles[[2]], subset$alleles[[1]]))
-length(setdiff(subset$alleles[[3]], c(subset$alleles[[2]], subset$alleles[[1]])))
-length(setdiff(subset$alleles[[4]], c(subset$alleles[[3]], subset$alleles[[2]], subset$alleles[[1]])))
-length(setdiff(subset$alleles[[5]], c(subset$alleles[[4]], subset$alleles[[3]], subset$alleles[[2]], subset$alleles[[1]])))
+infection_results_visits <- allele_Accumulation %>%
+  group_by(`Numero de estudo`) %>%
+  mutate(infection_status = ifelse(diff_from_previous_counts > 0, "NEW_INFECTION", "same_infection"))
 
+write.csv(infection_results, "infection_results.csv", row.names = F)
+  
+
+# #cumulative check by hand for "ASINT2-0002". is it equal to the loop? YES
+# subset <- unique_alleles[unique_alleles$`Numero de estudo` == participants[1], ]
+# 
+# length(setdiff(subset$alleles[[2]], subset$alleles[[1]]))
+# length(setdiff(subset$alleles[[3]], c(subset$alleles[[2]], subset$alleles[[1]])))
+# length(setdiff(subset$alleles[[4]], c(subset$alleles[[3]], subset$alleles[[2]], subset$alleles[[1]])))
+# length(setdiff(subset$alleles[[5]], c(subset$alleles[[4]], subset$alleles[[3]], subset$alleles[[2]], subset$alleles[[1]])))
 
 
 # Plot cumsums
@@ -203,6 +214,8 @@ csplot <- ggplot(allele_Accumulation, aes(x = Visita, y = cumsum_diff_from_previ
   facet_wrap(~`Numero de estudo`, ncol = 15)
 
 csplot
+
+ggsave("allele_Accumulation.png", csplot, dpi = 300, height = 20, width = 30, bg = "white")
 
 #####################################################################################3
 
