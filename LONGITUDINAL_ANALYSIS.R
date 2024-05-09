@@ -121,6 +121,7 @@ merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[!grepl("D=", merged_dfs
 
 #####################################################################################3
 
+###### ANALYSIS #######
 
 #calculate the number of alleles for each locus per visit
 unique_alleles <- merged_dfs_locifil_allefil %>%
@@ -131,7 +132,7 @@ unique_alleles <- merged_dfs_locifil_allefil %>%
 print(unique_alleles, n =9999)
 
 
-### CUMNULATIVE FINDING OF ALLELES ACROSS VISITS ### 
+### CUMNULATIVE FINDING OF NEW ALLELES THROUGHOUT VISITS ### 
 
 # Function to calculate the different alleles between two visits
 get_different_alleles <- function(alleles1, alleles2) {
@@ -157,7 +158,6 @@ for (participant in participants) {
      mutate(diff_from_previous = c(NA, map(2:n(), function(i) get_different_alleles(alleles[[i-1]], alleles[[i]]))))
     
   }
-  
   allele_Accumulation[[participant]] <- subset
 }
 
@@ -184,18 +184,6 @@ cs <- allele_Accumulation %>%
 allele_Accumulation <- cbind(allele_Accumulation, cumsum_diff_from_previous_counts = cs$cumsum_diff_from_previous_counts)
 
 
-#categorize infections
-infection_results <- allele_Accumulation %>%
-  group_by(`Numero de estudo`) %>%
-  summarize(infection_status = ifelse(sum(diff_from_previous_counts) > 0, "NEW_INFECTION", "same_infection"))
-
-infection_results_visits <- allele_Accumulation %>%
-  group_by(`Numero de estudo`) %>%
-  mutate(infection_status = ifelse(diff_from_previous_counts > 0, "NEW_INFECTION", "same_infection"))
-
-write.csv(infection_results, "infection_results.csv", row.names = F)
-  
-
 # #cumulative check by hand for "ASINT2-0002". is it equal to the loop? YES
 # subset <- unique_alleles[unique_alleles$`Numero de estudo` == participants[1], ]
 # 
@@ -205,17 +193,28 @@ write.csv(infection_results, "infection_results.csv", row.names = F)
 # length(setdiff(subset$alleles[[5]], c(subset$alleles[[4]], subset$alleles[[3]], subset$alleles[[2]], subset$alleles[[1]])))
 
 
-# Plot cumsums
-csplot <- ggplot(allele_Accumulation, aes(x = Visita, y = cumsum_diff_from_previous_counts, group = `Numero de estudo`, color = `Numero de estudo`)) +
-  geom_line(linewidth = 1.2, alpha = 0.5) +
+#categorize infections
+infection_results <- allele_Accumulation %>%
+  group_by(`Numero de estudo`) %>%
+  summarize(infection_status = ifelse(length(diff_from_previous_counts) ==  1, NA, # there was only 1 visit
+                                      ifelse(sum(diff_from_previous_counts) > 0, "NEW_INFECTION", "same_infection")))
+
+
+write.csv(infection_results, "infection_results.csv", row.names = F)
+  
+
+#visualization
+allele_Accumulation_status <- merge(allele_Accumulation, infection_results, by=c("Numero de estudo"))
+
+csplot <- ggplot(allele_Accumulation_status, aes(x = Visita, y = cumsum_diff_from_previous_counts, group = `Numero de estudo`, color = infection_status)) +
+  geom_line(linewidth = 1.5, alpha = 0.5) +
   labs(x = "Visit", y = "Allele Accumulation Throughout Visits", title = "") +
   theme_minimal() +
-  guides(color = FALSE) +
   facet_wrap(~`Numero de estudo`, ncol = 15)
 
 csplot
 
-ggsave("allele_Accumulation.png", csplot, dpi = 300, height = 20, width = 30, bg = "white")
+ggsave("allele_Accumulation.png", csplot, dpi = 300, height = 12, width = 17, bg = "white")
 
 #####################################################################################3
 
