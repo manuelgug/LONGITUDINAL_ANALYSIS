@@ -1,13 +1,6 @@
 library(dplyr)
 library(ggplot2)
 library(purrr)
-# library(ggbeeswarm)
-# library(gridExtra)
-# library(plotly)
-# library(tidyr)
-# library(patchwork)
-# library(reshape2)
-# library(moire)
 
 #####################################################################################3
 
@@ -95,13 +88,24 @@ threshold <- round(0.95 * length(unique(merged_dfs$NIDA)))
 good_loci <- as.character(element_counts[element_counts$Freq >= threshold,]$all_elements)
 
 
+# PENDING: FILTER OUT LOCI THAT ARE VERY HIGH IN SOME OF THE NEG CONTROLS (see bar plots of FILTERED data used here) =  unreliable loci.
+
+unreliable_loci <- c("PmUG01_12_v1-1397996-1398245-1AB", "Pf3D7_03_v3-653961-654206-1A")
+
+common_loci <- common_loci[!common_loci %in% unreliable_loci]
+good_loci <- good_loci[!good_loci %in% unreliable_loci]
+
+
 # select loci to use
 if (length(common_loci) == 0){
   
-  print("WARNING: no common loci across all visits of all patients. Choosing good loci instead.")
+  print("WARNING: no common loci across all visits of all patients. Choosing good loci instead:")
+  cat("\n")
   
   #keep loci present in 95% of samples
   merged_dfs_locifil <- merged_dfs[merged_dfs$locus %in% good_loci,]
+  
+  print(good_loci)
   
 } else {
   
@@ -111,6 +115,7 @@ if (length(common_loci) == 0){
   merged_dfs_locifil <- merged_dfs[merged_dfs$locus %in% common_loci,]
   
 }
+
 
 
 ####### ALLELE FILTERING #######
@@ -217,6 +222,11 @@ csplot
 ggsave("allele_Accumulation.png", csplot, dpi = 300, height = 12, width = 17, bg = "white")
 
 #####################################################################################3
+
+
+
+
+
 
 
 
