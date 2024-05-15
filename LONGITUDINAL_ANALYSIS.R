@@ -223,6 +223,59 @@ ggsave("allele_Accumulation.png", csplot, dpi = 300, height = 12, width = 17, bg
 
 #####################################################################################3
 
+# PCoA plot of cmmulative alleles through visits.
+
+
+pcoa_data <- allele_Accumulation_status[c(1, 2, 7,length(colnames(allele_Accumulation_status)))]
+
+library(vegan)
+library(ape)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+
+
+# Reshape the data to wide format
+data_wide <- pcoa_data %>%
+  select(-infection_status) %>%
+  pivot_wider(names_from = Visita, values_from = cumsum_diff_from_previous_counts, values_fill = 0) %>%
+  as.data.frame()
+
+#data_wide <- data_wide[,-2]
+
+# Extract the infection status for coloring
+infection_status <- pcoa_data %>%
+  distinct(`Numero de estudo`, infection_status)
+
+# Calculate the distance matrix using vegan's vegdist function
+dist_matrix <- vegdist(data_wide %>% select(-`Numero de estudo`), method = "bray")
+
+# Perform PCoA using ape's pcoa function
+pcoa_result <- pcoa(dist_matrix)
+
+# Create a data frame for the PCoA results
+pcoa_data <- data.frame(
+  Numero_de_estudo = data_wide$`Numero de estudo`,
+  PC1 = pcoa_result$points[, 1],
+  PC2 = pcoa_result$points[, 2]
+)
+
+# Merge the PCoA results with the infection status
+colnames(infection_status)[1] <- "Numero_de_estudo"
+pcoa_data <- merge(pcoa_data, infection_status, by = "Numero_de_estudo")
+
+# Plot the PCoA results
+ggplot(pcoa_data, aes(x = PC1, y = PC2, label = Numero_de_estudo, color = infection_status)) +
+  geom_point(size = 3, alpha =0.5) +
+  geom_text(vjust = 1.5, hjust = 1.5) +
+  labs(title = "PCoA of Allele Accumulation",
+       x = "Principal Coordinate 1",
+       y = "Principal Coordinate 2") +
+  theme_minimal() +
+  scale_color_discrete(name = "Infection Status")
+
+
+
 
 
 
