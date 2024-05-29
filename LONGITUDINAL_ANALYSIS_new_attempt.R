@@ -3,6 +3,12 @@ library(ggplot2)
 library(purrr)
 
 #####################################################################################3
+# PARAMETERS
+
+MAF <- 0.01
+min_reads <- 100
+quantile_good_loci <- 0.995 # pick loci shared across n% of clean high quality samples for analysis
+
 
 ####### IMPORTS AND FORMATTING #######
 
@@ -88,9 +94,6 @@ merged_dfs_locifil_allefil$NIDA <- paste0(merged_dfs_locifil_allefil$`Numero de 
 #####################################################################################3
 
 ####### 1) ALLELE FILTERING #######
-MAF <- 0.01
-min_reads <- 100
-
 merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$norm.reads.locus >= MAF,] #MAF
 merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$reads >= min_reads,] # 100 reads minimum
 merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[!grepl("I=", merged_dfs_locifil_allefil$allele),] #remove alleles with I (insertion)
@@ -165,7 +168,7 @@ element_counts <- element_counts[order(-element_counts$Freq), ]
 common_loci <- Reduce(intersect, unique_loci_list$unique_loci_list) #no common loci across all visits/patients....
 
 # keep loci present in at least 95% of samples (visits)
-threshold <- round(0.995 * length(unique(merged_dfs_locifil_allefil$NIDA))) 
+threshold <- round(quantile_good_loci * length(unique(merged_dfs_locifil_allefil$NIDA))) 
 good_loci <- as.character(element_counts[element_counts$Freq >= threshold,]$all_elements)
 
 #ama-1 as only good locus
@@ -201,7 +204,7 @@ if (length(common_loci) == 0){
 
 #####################################################################################3
 
-#area plots:
+#stacked bar plots:
 
 unique(merged_dfs_locifil_allefil$allele)
 
@@ -226,7 +229,7 @@ selected_colors <- rainbow(num_colors * color_jump)[rand_indices]
 
 stack_bar <- ggplot(merged_dfs_locifil_allefil, aes(x = Visita, y = norm.reads.locus, fill = allele)) +
   geom_bar(stat = "identity", position = "stack") +
-  labs(x = "Visit", y = "Normalized Reads per Locus", fill = "Allele") +
+  labs(x = "Visit", y = "Normalized Reads per Locus", fill = "Allele", title = paste0("MAF = ", MAF, "; Min reads = ", min_reads, "; n loci used = ", length(good_loci))) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         legend.position = "none")+
@@ -235,7 +238,7 @@ stack_bar <- ggplot(merged_dfs_locifil_allefil, aes(x = Visita, y = norm.reads.l
 
 stack_bar
 
-ggsave(paste0("stacked_barplot_MAF_", MAF, "_minreads_", min_reads, ".png"), stack_bar, dpi = 300, height = 12, width = 17, bg = "white")
+ggsave(paste0("stacked_barplot_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", quantile_good_loci, ".png"), stack_bar, dpi = 300, height = 12, width = 17, bg = "white")
 
 
 
@@ -250,7 +253,7 @@ unique_alleles <- merged_dfs_locifil_allefil %>%
 print(unique_alleles, n =9999)
 
 
-### CUMNULATIVE FINDING OF NEW ALLELES THROUGHOUT VISITS ###                                   ESTÁ MAL!!!!!!!!!!1
+### CUMNULATIVE FINDING OF NEW ALLELES THROUGHOUT VISITS ###
 
 # Function to calculate the different alleles between two visits
 get_different_alleles <- function(alleles1, alleles2) {
@@ -326,7 +329,7 @@ infection_results <- allele_Accumulation %>%
                                       ifelse(sum(diff_from_previous_counts) > 0, "NEW_INFECTION", "same_infection")))
 
 
-write.csv(infection_results, paste0("infection_results_MAF_", MAF, "_minreads_", min_reads,".csv"), row.names = F)
+write.csv(infection_results, paste0("infection_results_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", quantile_good_loci, ".csv"), row.names = F)
   
 
 #visualization
@@ -334,13 +337,13 @@ allele_Accumulation_status <- merge(allele_Accumulation, infection_results, by=c
 
 csplot <- ggplot(allele_Accumulation_status, aes(x = Visita, y = cumsum_diff_from_previous_counts, group = `Numero de estudo`, color = infection_status)) +
   geom_line(linewidth = 1.5, alpha = 0.5) +
-  labs(x = "Visit", y = "Allele Accumulation Throughout Visits", title = paste0("MAF = ", MAF, "; Min reads: ", min_reads)) +
+  labs(x = "Visit", y = "Allele Accumulation Throughout Visits", title = paste0("MAF = ", MAF, "; Min reads = ", min_reads, "; n loci used = ", length(good_loci))) +
   theme_minimal() +
   facet_wrap(~`Numero de estudo`, ncol = 8)
 
 csplot
 
-ggsave(paste0("allele_Accumulation_MAF_", MAF, "_minreads_", min_reads, ".png"), csplot, dpi = 300, height = 12, width = 17, bg = "white")
+ggsave(paste0("allele_Accumulation_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", quantile_good_loci, ".png"), csplot, dpi = 300, height = 12, width = 17, bg = "white")
 
 #####################################################################################3
 
