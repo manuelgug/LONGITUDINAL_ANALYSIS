@@ -358,9 +358,9 @@ infection_analysis <- function(MAF = 0, min_reads = 100, quantile_good_loci = 0.
 
 # PARAMETERS
 
-MAF <- c(0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3)
+MAF <- c(0, 0.01, 0.02, 0.05, 0.075, 0.1, 0.2, 0.3)
 min_reads <- 100
-quantile_good_loci <- c(0.995, 0.99, 0.975, 0.95, 0.925, 0.9) # pick loci shared across n% of clean high quality samples for analysis
+quantile_good_loci <- c(0.995, 0.9925, 0.99, 0.975, 0.95, 0.925, 0.9) # pick loci shared across n% of clean high quality samples for analysis
 
 
 infections_percentages <- data.frame(NULL)
