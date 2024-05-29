@@ -89,7 +89,7 @@ merged_dfs_locifil_allefil$NIDA <- paste0(merged_dfs_locifil_allefil$`Numero de 
 
 ####### 1) ALLELE FILTERING #######
 MAF <- 0.01
-min_reads <- 0
+min_reads <- 100
 
 merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$norm.reads.locus >= MAF,] #MAF
 merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$reads >= min_reads,] # 100 reads minimum
@@ -216,14 +216,24 @@ merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
   arrange(norm.reads.locus, .by_group = TRUE) %>%
   ungroup()
 
+#coloring
+set.seed(69)
+num_colors <- length(unique(merged_dfs_locifil_allefil$allele))
+color_jump <- 1
+rand_indices <- sample(1:num_colors, num_colors, replace = FALSE)
+selected_colors <- rainbow(num_colors * color_jump)[rand_indices]
+
+
 stack_bar <- ggplot(merged_dfs_locifil_allefil, aes(x = Visita, y = norm.reads.locus, fill = allele)) +
   geom_bar(stat = "identity", position = "stack") +
   labs(x = "Visit", y = "Normalized Reads per Locus", fill = "Allele") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         legend.position = "none")+
-  facet_wrap(~`Numero de estudo`, ncol = 8)
+  facet_wrap(~`Numero de estudo`, ncol = 8)+
+  scale_fill_manual(values = selected_colors)
 
+stack_bar
 
 ggsave(paste0("stacked_barplot_MAF_", MAF, "_minreads_", min_reads, ".png"), stack_bar, dpi = 300, height = 12, width = 17, bg = "white")
 
@@ -249,6 +259,8 @@ get_different_alleles <- function(alleles1, alleles2) {
 
 participants <- unique(unique_alleles$`Numero de estudo`)
 
+#participant <- "ASINT2-0044" #troubleshooting
+
 allele_Accumulation <- list()
 
 # Loop over each participant
@@ -260,12 +272,18 @@ for (participant in participants) {
   if (n_distinct(subset$Visita) == 1) {
     subset$diff_from_previous <- NA # If there's only one visit, insert NA and move to the next participant
   } else {
-    # Apply the function to each row
     subset <- subset %>%
       arrange(Visita) %>%
-     mutate(diff_from_previous = c(NA, map(2:n(), function(i) get_different_alleles(alleles[[i-1]], alleles[[i]]))))
-    
+      mutate(diff_from_previous = map(1:n(), function(i) {
+        if (i == 1) {
+          return(NA)
+        } else {
+          all_previous_alleles <- unique(unlist(subset$alleles[1:(i-1)]))
+          get_different_alleles(all_previous_alleles, subset$alleles[[i]])
+        }
+      }))
   }
+  
   allele_Accumulation[[participant]] <- subset
 }
 
