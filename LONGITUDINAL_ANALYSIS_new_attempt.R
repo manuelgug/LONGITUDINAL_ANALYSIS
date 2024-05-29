@@ -3,12 +3,6 @@ library(ggplot2)
 library(purrr)
 
 #####################################################################################3
-# PARAMETERS
-
-MAF <- 0.01
-min_reads <- 100
-quantile_good_loci <- 0.995 # pick loci shared across n% of clean high quality samples for analysis
-
 
 ####### IMPORTS AND FORMATTING #######
 
@@ -57,293 +51,335 @@ print(missing_nidas)
 #remove missing NIDAs from data
 merged_dfs <- merged_dfs[!is.na(merged_dfs$locus),]
 
-#####################################################################################3
-
-####### POOL V1 AND V5 VISITS INTO V1V5 #######
-merged_dfs_locifil_allefil <- merged_dfs %>%
-  mutate(Visita = case_when(
-    Visita %in% c("V1", "V5") ~ "V1V5",
-    TRUE ~ Visita
-  ))
-
-merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
-  group_by(`Numero de estudo`, Visita, locus, Category, allele, pseudo_cigar) %>%
-  summarize(reads = sum(reads))
-
-# recalculate in-sample allele freqs
-k<- merged_dfs_locifil_allefil %>% 
-  group_by(`Numero de estudo`,Visita,locus,Category) %>%
-  summarize(norm.reads.locus = reads / sum(reads))
-
-merged_dfs_locifil_allefil <- cbind(k, merged_dfs_locifil_allefil[c("allele", "pseudo_cigar", "reads")])
-
-#pseudo nida
-merged_dfs_locifil_allefil$NIDA <- paste0(merged_dfs_locifil_allefil$`Numero de estudo`, "_", merged_dfs_locifil_allefil$Visita)
-
-
-#####################################################################################
-# #check for presence of ama-1 amplicon
-# ama1<- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$locus == "Pf3D7_11_v3-1294284-1294580-1B",] #está en pocas muestras
-# length(unique(ama1$NIDA))
-# 
-# median(ama1$reads)
-# hist(ama1$reads)
-#####################################################################################3
-
-
-#####################################################################################3
-
-####### 1) ALLELE FILTERING #######
-merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$norm.reads.locus >= MAF,] #MAF
-merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$reads >= min_reads,] # 100 reads minimum
-merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[!grepl("I=", merged_dfs_locifil_allefil$allele),] #remove alleles with I (insertion)
-merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[!grepl("D=", merged_dfs_locifil_allefil$allele),] #remove alleles with D (deletion)
-
-
-#####################################################################################
-# #check for presence of ama-1 amplicon
-# ama1<- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$locus == "Pf3D7_11_v3-1294284-1294580-1B",] #está en pocas muestras
-# length(unique(ama1$NIDA))
-# 
-# median(ama1$reads)
-# hist(ama1$reads)
-# 
-# #GONE
-#####################################################################################3
 
 
 
-###### 2) SAMPLE FILTERING #######
-unique_loci_list <- merged_dfs_locifil_allefil %>%
-  group_by(`Numero de estudo`, NIDA, Visita) %>%
-  summarize(unique_loci = unique(locus)) %>%
-  summarize(unique_loci_list = list(unique_loci))
+### ANALYSIS FUNCTION !!!
 
-print(unique_loci_list, n = 9999)
-
-#remove samples with less than 50 loci sequenced
-unique_loci_list$unique_loci_count <- sapply(unique_loci_list$unique_loci_list, length)
-
-samples_to_remove <- unique_loci_list[unique_loci_list$unique_loci_count < 50,]$NIDA
-
-unique_loci_list <- unique_loci_list[!unique_loci_list$NIDA %in% samples_to_remove,]
-hist(unique_loci_list$unique_loci_count)
-
-merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[!merged_dfs_locifil_allefil$NIDA %in% samples_to_remove,]
-length(unique(merged_dfs_locifil_allefil$NIDA))
-
-
-####### 3) PATIENT FILTERING #######
-#remove patients that don't have all 4 visits
-merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
-  group_by(`Numero de estudo`) %>%
-  filter(n_distinct(Visita) == 4) %>%
-  ungroup()
-
-#check
-l<- merged_dfs_locifil_allefil %>%
-  group_by(`Numero de estudo`)%>%
-  summarize(length(unique(Visita)))
-
-print(paste0(length(unique(l$`Numero de estudo`))  ," patients with ", unique(l$`length(unique(Visita))`), " visits"))
-#####################################################################################3
-
-
-
-###### LOCI SELECTION #######
-unique_loci_list <- merged_dfs_locifil_allefil %>%
-  group_by(`Numero de estudo`, NIDA, Visita) %>%
-  summarize(unique_loci = unique(locus)) %>%
-  summarize(unique_loci_list = list(unique_loci))
-
-print(unique_loci_list, n = 9999)
-
-unique_loci_list$unique_loci_count <- sapply(unique_loci_list$unique_loci_list, length)
-
-#loci present in all visits of all patients
-all_elements <- unlist(unique_loci_list$unique_loci_list)
-element_counts <- as.data.frame(table(all_elements))
-element_counts <- element_counts[order(-element_counts$Freq), ]
-
-common_loci <- Reduce(intersect, unique_loci_list$unique_loci_list) #no common loci across all visits/patients....
-
-# keep loci present in at least 95% of samples (visits)
-threshold <- round(quantile_good_loci * length(unique(merged_dfs_locifil_allefil$NIDA))) 
-good_loci <- as.character(element_counts[element_counts$Freq >= threshold,]$all_elements)
-
-#ama-1 as only good locus
-# good_loci <- "Pf3D7_11_v3-1294284-1294580-1B"
-
-# PENDING: FILTER OUT LOCI THAT ARE VERY HIGH IN SOME OF THE NEG CONTROLS (see bar plots of FILTERED data used here) =  unreliable loci.
-unreliable_loci <- c("PmUG01_12_v1-1397996-1398245-1AB", "Pf3D7_03_v3-653961-654206-1A")
-
-common_loci <- common_loci[!common_loci %in% unreliable_loci]
-good_loci <- good_loci[!good_loci %in% unreliable_loci]
-
-
-# select loci to use
-if (length(common_loci) == 0){
+infection_analysis <- function(MAF = 0, min_reads = 100, quantile_good_loci = 0.995){ 
   
-  print("WARNING: no common loci across all visits of all patients. Choosing good loci instead:")
-  cat("\n")
+  #####################################################################################3
+  ####### POOL V1 AND V5 VISITS INTO V1V5 #######
+  merged_dfs_locifil_allefil <- merged_dfs %>%
+    mutate(Visita = case_when(
+      Visita %in% c("V1", "V5") ~ "V1V5",
+      TRUE ~ Visita
+    ))
   
-  #keep loci present in 95% of samples
-  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$locus %in% good_loci,]
+  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
+    group_by(`Numero de estudo`, Visita, locus, Category, allele, pseudo_cigar) %>%
+    summarize(reads = sum(reads))
   
-  print(good_loci)
+  # recalculate in-sample allele freqs
+  k<- merged_dfs_locifil_allefil %>% 
+    group_by(`Numero de estudo`,Visita,locus,Category) %>%
+    summarize(norm.reads.locus = reads / sum(reads))
   
-} else {
+  merged_dfs_locifil_allefil <- cbind(k, merged_dfs_locifil_allefil[c("allele", "pseudo_cigar", "reads")])
   
-  print(paste0(length(common_loci), " common loci found across all samples."))
+  #pseudo nida
+  merged_dfs_locifil_allefil$NIDA <- paste0(merged_dfs_locifil_allefil$`Numero de estudo`, "_", merged_dfs_locifil_allefil$Visita)
   
-  #keep common loci
-  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$locus %in% common_loci,]
   
-}
-
-
-#####################################################################################3
-
-#stacked bar plots:
-
-unique(merged_dfs_locifil_allefil$allele)
-
-# Convert `Visita` to a factor to ensure proper ordering in the plot
-merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
-  mutate(Visita = factor(Visita, levels = unique(Visita)))
-
-merged_dfs_locifil_allefil$Visita
-
-merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
-  group_by(Visita) %>%
-  arrange(norm.reads.locus, .by_group = TRUE) %>%
-  ungroup()
-
-#coloring
-set.seed(69)
-num_colors <- length(unique(merged_dfs_locifil_allefil$allele))
-color_jump <- 1
-rand_indices <- sample(1:num_colors, num_colors, replace = FALSE)
-selected_colors <- rainbow(num_colors * color_jump)[rand_indices]
-
-
-stack_bar <- ggplot(merged_dfs_locifil_allefil, aes(x = Visita, y = norm.reads.locus, fill = allele)) +
-  geom_bar(stat = "identity", position = "stack") +
-  labs(x = "Visit", y = "Normalized Reads per Locus", fill = "Allele", title = paste0("MAF = ", MAF, "; Min reads = ", min_reads, "; n loci used = ", length(good_loci))) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position = "none")+
-  facet_wrap(~`Numero de estudo`, ncol = 8)+
-  scale_fill_manual(values = selected_colors)
-
-stack_bar
-
-ggsave(paste0("stacked_barplot_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", quantile_good_loci, ".png"), stack_bar, dpi = 300, height = 12, width = 17, bg = "white")
-
-
-
-###### ANALYSIS #######
-
-#calculate the number of alleles for each locus per visit
-unique_alleles <- merged_dfs_locifil_allefil %>%
-  group_by(`Numero de estudo`, Visita) %>%
-  summarize(alleles = list(allele),
-            allele_count = length(allele))
-
-print(unique_alleles, n =9999)
-
-
-### CUMNULATIVE FINDING OF NEW ALLELES THROUGHOUT VISITS ###
-
-# Function to calculate the different alleles between two visits
-get_different_alleles <- function(alleles1, alleles2) {
-  setdiff(alleles2, alleles1)
-}
-
-participants <- unique(unique_alleles$`Numero de estudo`)
-
-#participant <- "ASINT2-0044" #troubleshooting
-
-allele_Accumulation <- list()
-
-# Loop over each participant
-for (participant in participants) {
+  #####################################################################################
+  # #check for presence of ama-1 amplicon
+  # ama1<- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$locus == "Pf3D7_11_v3-1294284-1294580-1B",] #está en pocas muestras
+  # length(unique(ama1$NIDA))
+  # 
+  # median(ama1$reads)
+  # hist(ama1$reads)
+  #####################################################################################3
   
-  subset <- unique_alleles[unique_alleles$`Numero de estudo` == participant, ]
   
-  # Check if there's only one visit for this participant
-  if (n_distinct(subset$Visita) == 1) {
-    subset$diff_from_previous <- NA # If there's only one visit, insert NA and move to the next participant
+  #####################################################################################3
+  
+  ####### 1) ALLELE FILTERING #######
+  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$norm.reads.locus >= MAF,] #MAF
+  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$reads >= min_reads,] # 100 reads minimum
+  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[!grepl("I=", merged_dfs_locifil_allefil$allele),] #remove alleles with I (insertion)
+  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[!grepl("D=", merged_dfs_locifil_allefil$allele),] #remove alleles with D (deletion)
+  
+  
+  #####################################################################################
+  # #check for presence of ama-1 amplicon
+  # ama1<- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$locus == "Pf3D7_11_v3-1294284-1294580-1B",] #está en pocas muestras
+  # length(unique(ama1$NIDA))
+  # 
+  # median(ama1$reads)
+  # hist(ama1$reads)
+  # 
+  # #GONE
+  #####################################################################################3
+  
+  
+  
+  ###### 2) SAMPLE FILTERING #######
+  unique_loci_list <- merged_dfs_locifil_allefil %>%
+    group_by(`Numero de estudo`, NIDA, Visita) %>%
+    summarize(unique_loci = unique(locus)) %>%
+    summarize(unique_loci_list = list(unique_loci))
+  
+  #print(unique_loci_list, n = 9999)
+  
+  #remove samples with less than 50 loci sequenced
+  unique_loci_list$unique_loci_count <- sapply(unique_loci_list$unique_loci_list, length)
+  
+  samples_to_remove <- unique_loci_list[unique_loci_list$unique_loci_count < 50,]$NIDA
+  
+  unique_loci_list <- unique_loci_list[!unique_loci_list$NIDA %in% samples_to_remove,]
+  #hist(unique_loci_list$unique_loci_count)
+  
+  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[!merged_dfs_locifil_allefil$NIDA %in% samples_to_remove,]
+  length(unique(merged_dfs_locifil_allefil$NIDA))
+  
+  
+  ####### 3) PATIENT FILTERING #######
+  #remove patients that don't have all 4 visits
+  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
+    group_by(`Numero de estudo`) %>%
+    filter(n_distinct(Visita) == 4) %>%
+    ungroup()
+  
+  #check
+  l<- merged_dfs_locifil_allefil %>%
+    group_by(`Numero de estudo`)%>%
+    summarize(length(unique(Visita)))
+  
+  print(paste0(length(unique(l$`Numero de estudo`))  ," patients with ", unique(l$`length(unique(Visita))`), " visits"))
+  #####################################################################################3
+  
+  
+  
+  ###### LOCI SELECTION #######
+  unique_loci_list <- merged_dfs_locifil_allefil %>%
+    group_by(`Numero de estudo`, NIDA, Visita) %>%
+    summarize(unique_loci = unique(locus)) %>%
+    summarize(unique_loci_list = list(unique_loci))
+  
+  #print(unique_loci_list, n = 9999)
+  
+  unique_loci_list$unique_loci_count <- sapply(unique_loci_list$unique_loci_list, length)
+  
+  #loci present in all visits of all patients
+  all_elements <- unlist(unique_loci_list$unique_loci_list)
+  element_counts <- as.data.frame(table(all_elements))
+  element_counts <- element_counts[order(-element_counts$Freq), ]
+  
+  common_loci <- Reduce(intersect, unique_loci_list$unique_loci_list) #no common loci across all visits/patients....
+  
+  # keep loci present in at least 95% of samples (visits)
+  threshold <- round(quantile_good_loci * length(unique(merged_dfs_locifil_allefil$NIDA))) 
+  good_loci <- as.character(element_counts[element_counts$Freq >= threshold,]$all_elements)
+  
+  #ama-1 as only good locus
+  # good_loci <- "Pf3D7_11_v3-1294284-1294580-1B"
+  
+  # PENDING: FILTER OUT LOCI THAT ARE VERY HIGH IN SOME OF THE NEG CONTROLS (see bar plots of FILTERED data used here) =  unreliable loci.
+  unreliable_loci <- c("PmUG01_12_v1-1397996-1398245-1AB", "Pf3D7_03_v3-653961-654206-1A")
+  
+  common_loci <- common_loci[!common_loci %in% unreliable_loci]
+  good_loci <- good_loci[!good_loci %in% unreliable_loci]
+  
+  
+  # select loci to use
+  if (length(common_loci) == 0){
+    
+    print("WARNING: no common loci across all visits of all patients. Choosing good loci instead:")
+    cat("\n")
+    
+    #keep loci present in 95% of samples
+    merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$locus %in% good_loci,]
+    
+    print(good_loci)
+    
   } else {
-    subset <- subset %>%
-      arrange(Visita) %>%
-      mutate(diff_from_previous = map(1:n(), function(i) {
-        if (i == 1) {
-          return(NA)
-        } else {
-          all_previous_alleles <- unique(unlist(subset$alleles[1:(i-1)]))
-          get_different_alleles(all_previous_alleles, subset$alleles[[i]])
-        }
-      }))
+    
+    print(paste0(length(common_loci), " common loci found across all samples."))
+    
+    #keep common loci
+    merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$locus %in% common_loci,]
+    
   }
   
-  allele_Accumulation[[participant]] <- subset
+  
+  #####################################################################################3
+  
+  #stacked bar plots:
+  
+  unique(merged_dfs_locifil_allefil$allele)
+  
+  # Convert `Visita` to a factor to ensure proper ordering in the plot
+  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
+    mutate(Visita = factor(Visita, levels = unique(Visita)))
+  
+  merged_dfs_locifil_allefil$Visita
+  
+  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
+    group_by(Visita) %>%
+    arrange(norm.reads.locus, .by_group = TRUE) %>%
+    ungroup()
+  
+  #coloring
+  set.seed(69)
+  num_colors <- length(unique(merged_dfs_locifil_allefil$allele))
+  color_jump <- 1
+  rand_indices <- sample(1:num_colors, num_colors, replace = FALSE)
+  selected_colors <- rainbow(num_colors * color_jump)[rand_indices]
+  
+  
+  stack_bar <- ggplot(merged_dfs_locifil_allefil, aes(x = Visita, y = norm.reads.locus, fill = allele)) +
+    geom_bar(stat = "identity", position = "stack") +
+    labs(x = "Visit", y = "Normalized Reads per Locus", fill = "Allele", title = paste0("MAF = ", MAF, "; Min reads = ", min_reads, "; n loci used = ", length(good_loci))) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position = "none")+
+    facet_wrap(~`Numero de estudo`, ncol = 8)+
+    scale_fill_manual(values = selected_colors)
+  
+  #stack_bar
+  
+  ggsave(paste0("stacked_barplot_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", quantile_good_loci, ".png"), stack_bar, dpi = 300, height = 12, width = 17, bg = "white")
+  
+  
+  
+  ###### ANALYSIS #######
+  
+  #calculate the number of alleles for each locus per visit
+  unique_alleles <- merged_dfs_locifil_allefil %>%
+    group_by(`Numero de estudo`, Visita) %>%
+    summarize(alleles = list(allele),
+              allele_count = length(allele))
+  
+  #print(unique_alleles, n =9999)
+  
+  
+  ### CUMNULATIVE FINDING OF NEW ALLELES THROUGHOUT VISITS ###
+  
+  # Function to calculate the different alleles between two visits
+  get_different_alleles <- function(alleles1, alleles2) {
+    setdiff(alleles2, alleles1)
+  }
+  
+  participants <- unique(unique_alleles$`Numero de estudo`)
+  
+  #participant <- "ASINT2-0044" #troubleshooting
+  
+  allele_Accumulation <- list()
+  
+  # Loop over each participant
+  for (participant in participants) {
+    
+    subset <- unique_alleles[unique_alleles$`Numero de estudo` == participant, ]
+    
+    # Check if there's only one visit for this participant
+    if (n_distinct(subset$Visita) == 1) {
+      subset$diff_from_previous <- NA # If there's only one visit, insert NA and move to the next participant
+    } else {
+      subset <- subset %>%
+        arrange(Visita) %>%
+        mutate(diff_from_previous = map(1:n(), function(i) {
+          if (i == 1) {
+            return(NA)
+          } else {
+            all_previous_alleles <- unique(unlist(subset$alleles[1:(i-1)]))
+            get_different_alleles(all_previous_alleles, subset$alleles[[i]])
+          }
+        }))
+    }
+    
+    allele_Accumulation[[participant]] <- subset
+  }
+  
+  allele_Accumulation <- do.call(rbind, allele_Accumulation)
+  
+  #count alleles
+  # Function to check the class of each element in the list column
+  check_class <- function(cell) {
+    if (is.logical(cell)) {
+      return(0)
+    } else {
+      return(length(cell))
+    }
+  }
+  
+  allele_Accumulation$diff_from_previous_counts <- unlist(map(allele_Accumulation$diff_from_previous, check_class))
+  #print(allele_Accumulation)
+  
+  ## cummulative sum of alleles throughout time
+  cs <- allele_Accumulation %>% 
+    group_by(`Numero de estudo`) %>%
+    summarize(cumsum_diff_from_previous_counts = cumsum(diff_from_previous_counts))
+  
+  allele_Accumulation <- cbind(allele_Accumulation, cumsum_diff_from_previous_counts = cs$cumsum_diff_from_previous_counts)
+  
+  
+  # #cumulative check by hand for "ASINT2-0002". is it equal to the loop? YES
+  # subset <- unique_alleles[unique_alleles$`Numero de estudo` == participants[1], ]
+  # 
+  # length(setdiff(subset$alleles[[2]], subset$alleles[[1]]))
+  # length(setdiff(subset$alleles[[3]], c(subset$alleles[[2]], subset$alleles[[1]])))
+  # length(setdiff(subset$alleles[[4]], c(subset$alleles[[3]], subset$alleles[[2]], subset$alleles[[1]])))
+  # length(setdiff(subset$alleles[[5]], c(subset$alleles[[4]], subset$alleles[[3]], subset$alleles[[2]], subset$alleles[[1]])))
+  
+  
+  #categorize infections
+  infection_results <- allele_Accumulation %>%
+    group_by(`Numero de estudo`) %>%
+    summarize(infection_status = ifelse(length(diff_from_previous_counts) ==  1, NA, # there was only 1 visit
+                                        ifelse(sum(diff_from_previous_counts) > 0, "NI", "R")))
+  
+  R_percentage <- round(length(sum(infection_results$infection_status == "R")) / length(infection_results$infection_status),2)
+  n_good_loci <- length(good_loci)
+  
+  write.csv(infection_results, paste0("infection_results_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", quantile_good_loci, ".csv"), row.names = F)
+    
+  
+  #visualization
+  allele_Accumulation_status <- merge(allele_Accumulation, infection_results, by=c("Numero de estudo"))
+  
+  csplot <- ggplot(allele_Accumulation_status, aes(x = Visita, y = cumsum_diff_from_previous_counts, group = `Numero de estudo`, color = infection_status)) +
+    geom_line(linewidth = 1.5, alpha = 0.5) +
+    labs(x = "Visit", y = "Allele Accumulation Throughout Visits", title = paste0("MAF = ", MAF, "; Min reads = ", min_reads, "; n loci used = ", length(good_loci))) +
+    theme_minimal() +
+    facet_wrap(~`Numero de estudo`, ncol = 8)
+  
+  #csplot
+  
+  ggsave(paste0("allele_Accumulation_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", quantile_good_loci, ".png"), csplot, dpi = 300, height = 12, width = 17, bg = "white")
+
+
+  ress <- data.frame(R_percentage = R_percentage, n_good_loci = n_good_loci)
+    
+  return(ress)
+  
 }
 
-allele_Accumulation <- do.call(rbind, allele_Accumulation)
 
-#count alleles
-# Function to check the class of each element in the list column
-check_class <- function(cell) {
-  if (is.logical(cell)) {
-    return(0)
-  } else {
-    return(length(cell))
+
+# PARAMETERS
+
+MAF <- c(0, 0.01, 0.05, 0.1, 0.2, 0.3)
+min_reads <- 100
+quantile_good_loci <- c(0.995, 0.99, 0.975, 0.95) # pick loci shared across n% of clean high quality samples for analysis
+
+
+infections_percentages <- data.frame(NULL)
+
+for (maf in MAF) {
+  for (qgl in quantile_good_loci) {
+    
+    # Call the infection_analysis function with the current values of maf and qgl
+    ress <- infection_analysis(MAF = maf, min_reads = min_reads, quantile_good_loci = qgl)
+    
+    # Create a data frame with the results and the current values of maf and qgl
+    i_infection_percentages <- cbind(ress, quantile_good_loci = qgl, MAF = maf)
+    
+    # Combine the results into the final data frame
+    infections_percentages <- rbind(infections_percentages, i_infection_percentages)
   }
 }
 
-allele_Accumulation$diff_from_previous_counts <- unlist(map(allele_Accumulation$diff_from_previous, check_class))
-print(allele_Accumulation)
-
-## cummulative sum of alleles throughout time
-cs <- allele_Accumulation %>% 
-  group_by(`Numero de estudo`) %>%
-  summarize(cumsum_diff_from_previous_counts = cumsum(diff_from_previous_counts))
-
-allele_Accumulation <- cbind(allele_Accumulation, cumsum_diff_from_previous_counts = cs$cumsum_diff_from_previous_counts)
-
-
-# #cumulative check by hand for "ASINT2-0002". is it equal to the loop? YES
-# subset <- unique_alleles[unique_alleles$`Numero de estudo` == participants[1], ]
-# 
-# length(setdiff(subset$alleles[[2]], subset$alleles[[1]]))
-# length(setdiff(subset$alleles[[3]], c(subset$alleles[[2]], subset$alleles[[1]])))
-# length(setdiff(subset$alleles[[4]], c(subset$alleles[[3]], subset$alleles[[2]], subset$alleles[[1]])))
-# length(setdiff(subset$alleles[[5]], c(subset$alleles[[4]], subset$alleles[[3]], subset$alleles[[2]], subset$alleles[[1]])))
-
-
-#categorize infections
-infection_results <- allele_Accumulation %>%
-  group_by(`Numero de estudo`) %>%
-  summarize(infection_status = ifelse(length(diff_from_previous_counts) ==  1, NA, # there was only 1 visit
-                                      ifelse(sum(diff_from_previous_counts) > 0, "NEW_INFECTION", "same_infection")))
-
-
-write.csv(infection_results, paste0("infection_results_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", quantile_good_loci, ".csv"), row.names = F)
-  
-
-#visualization
-allele_Accumulation_status <- merge(allele_Accumulation, infection_results, by=c("Numero de estudo"))
-
-csplot <- ggplot(allele_Accumulation_status, aes(x = Visita, y = cumsum_diff_from_previous_counts, group = `Numero de estudo`, color = infection_status)) +
-  geom_line(linewidth = 1.5, alpha = 0.5) +
-  labs(x = "Visit", y = "Allele Accumulation Throughout Visits", title = paste0("MAF = ", MAF, "; Min reads = ", min_reads, "; n loci used = ", length(good_loci))) +
-  theme_minimal() +
-  facet_wrap(~`Numero de estudo`, ncol = 8)
-
-csplot
-
-ggsave(paste0("allele_Accumulation_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", quantile_good_loci, ".png"), csplot, dpi = 300, height = 12, width = 17, bg = "white")
+infections_percentages
 
 #####################################################################################3
 
