@@ -46,7 +46,7 @@ merged_dfs <- merge(metadata, allele_data, by="NIDA", all.x = TRUE)
 # NIDAS without sequencing
 missing <- merged_dfs[is.na(merged_dfs$locus),]
 missing_nidas <- unique(missing$NIDA)
-print(missing_nidas)
+#print(missing_nidas)
 
 #remove missing NIDAs from data
 merged_dfs <- merged_dfs[!is.na(merged_dfs$locus),]
@@ -190,7 +190,7 @@ infection_analysis <- function(MAF = 0, min_reads = 100, quantile_good_loci = 0.
     #keep loci present in 95% of samples
     merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil[merged_dfs_locifil_allefil$locus %in% good_loci,]
     
-    print(good_loci)
+    #print(good_loci)
     
   } else {
     
@@ -328,7 +328,7 @@ infection_analysis <- function(MAF = 0, min_reads = 100, quantile_good_loci = 0.
     summarize(infection_status = ifelse(length(diff_from_previous_counts) ==  1, NA, # there was only 1 visit
                                         ifelse(sum(diff_from_previous_counts) > 0, "NI", "R")))
   
-  R_percentage <- round(length(sum(infection_results$infection_status == "R")) / length(infection_results$infection_status),2)
+  R_percentage <- round(sum(infection_results$infection_status == "R") / length(infection_results$infection_status),2)
   n_good_loci <- length(good_loci)
   
   write.csv(infection_results, paste0("infection_results_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", quantile_good_loci, ".csv"), row.names = F)
@@ -358,9 +358,9 @@ infection_analysis <- function(MAF = 0, min_reads = 100, quantile_good_loci = 0.
 
 # PARAMETERS
 
-MAF <- c(0, 0.01, 0.05, 0.1, 0.2, 0.3)
+MAF <- c(0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3)
 min_reads <- 100
-quantile_good_loci <- c(0.995, 0.99, 0.975, 0.95) # pick loci shared across n% of clean high quality samples for analysis
+quantile_good_loci <- c(0.995, 0.99, 0.975, 0.95, 0.925, 0.9) # pick loci shared across n% of clean high quality samples for analysis
 
 
 infections_percentages <- data.frame(NULL)
@@ -380,6 +380,21 @@ for (maf in MAF) {
 }
 
 infections_percentages
+
+# Reverse the order of levels for quantile_good_loci
+infections_percentages$quantile_good_loci <- factor(infections_percentages$quantile_good_loci, levels = rev(levels(factor(infections_percentages$quantile_good_loci))))
+
+# Plot
+benchmark <- ggplot(infections_percentages, aes(x = quantile_good_loci, y = R_percentage, group = as.factor(MAF), color = as.factor(MAF), linetype = as.factor(MAF))) +
+  geom_line(size = 2, alpha = 0.5) +
+  labs(x = "Quantile of Good Loci", y = "%Recrudescences") +
+  theme_minimal()
+
+benchmark
+ggsave("benchmark_thresholds.png", benchmark, dpi = 300, height = 6, width = 10, bg = "white")
+
+
+
 
 #####################################################################################3
 
