@@ -69,6 +69,31 @@ visits_check <- merged_dfs %>%
 
 # Replace NA with 0 in the resulting dataframe
 visits_check[is.na(visits_check)] <- 0
+visits_check$n_visits <- rowSums(visits_check[,2:6])
+sort(visits_check)
+
+write.csv(visits_check, "patients_visits_check.csv", row.names = F)
+
+# Summarize the count of each unique value in n_visits
+visits_summary <- visits_check %>%
+  group_by(n_visits) %>%
+  summarize(count = n()) %>%
+  ungroup()
+
+# Create the pie chart
+pie_chart <- ggplot(visits_summary, aes(x = "", y = count, fill = factor(n_visits))) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  labs(x = NULL, y = NULL, fill = "Number of Visits", title = "Individuals") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks = element_blank(),
+        panel.grid = element_blank())+
+  geom_text(aes(label = count), 
+            position = position_stack(vjust = 0.5))
+
+ggsave("pie_chart_visits.png", pie_chart, dpi = 300, height = 6, width = 8, bg = "white")
+
 
 
 ### ANALYSIS FUNCTION !!!
@@ -440,8 +465,8 @@ infections_percentages <- infections_percentages[,-2]
 
 # Plot
 benchmark <- ggplot(infections_percentages, aes(x = as.factor(number_of_loci), y = R_percentage, group = as.factor(MAF), color = as.factor(MAF), linetype = as.factor(MAF))) +
-  geom_line(size = 2, alpha = 0.5) +
-  labs(x = "Quantile of Good Loci", y = "%Recrudescences") +
+  geom_line(size = 1.5, alpha = 0.5) +
+  labs(x = "Loci Used", y = "%Recrudescences") +
   theme_minimal()
 
 benchmark
