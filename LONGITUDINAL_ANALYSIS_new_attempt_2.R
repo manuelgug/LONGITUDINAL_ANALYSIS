@@ -60,39 +60,39 @@ missing_nidas <- unique(missing$NIDA)
 merged_dfs <- merged_dfs[!is.na(merged_dfs$locus),]
 
 
-# Generate a summary of visits for each `Numero de estudo`
-visits_check <- merged_dfs %>%
-  group_by(`Numero de estudo`, Visita) %>%
-  summarize(visit_present = n(), .groups = 'drop') %>%
-  mutate(visit_present = ifelse(visit_present > 0, 1, 0)) %>%
-  pivot_wider(names_from = Visita, values_from = visit_present, values_fill = list(visit_present = 0))
-
-# Replace NA with 0 in the resulting dataframe
-visits_check[is.na(visits_check)] <- 0
-visits_check$n_visits <- rowSums(visits_check[,2:6])
-sort(visits_check)
-
-write.csv(visits_check, "patients_visits_check.csv", row.names = F)
-
-# Summarize the count of each unique value in n_visits
-visits_summary <- visits_check %>%
-  group_by(n_visits) %>%
-  summarize(count = n()) %>%
-  ungroup()
-
-# Create the pie chart
-pie_chart <- ggplot(visits_summary, aes(x = "", y = count, fill = factor(n_visits))) +
-  geom_bar(stat = "identity", width = 1) +
-  coord_polar(theta = "y") +
-  labs(x = NULL, y = NULL, fill = "Number of Visits", title = "Individuals") +
-  theme_minimal() +
-  theme(axis.text.x = element_blank(),
-        axis.ticks = element_blank(),
-        panel.grid = element_blank())+
-  geom_text(aes(label = count), 
-            position = position_stack(vjust = 0.5))
-
-ggsave("pie_chart_visits.png", pie_chart, dpi = 300, height = 6, width = 8, bg = "white")
+# # Generate a summary of visits for each `Numero de estudo`
+# visits_check <- merged_dfs %>%
+#   group_by(`Numero de estudo`, Visita) %>%
+#   summarize(visit_present = n(), .groups = 'drop') %>%
+#   mutate(visit_present = ifelse(visit_present > 0, 1, 0)) %>%
+#   pivot_wider(names_from = Visita, values_from = visit_present, values_fill = list(visit_present = 0))
+# 
+# # Replace NA with 0 in the resulting dataframe
+# visits_check[is.na(visits_check)] <- 0
+# visits_check$n_visits <- rowSums(visits_check[,2:6])
+# sort(visits_check)
+# 
+# write.csv(visits_check, "patients_visits_check.csv", row.names = F)
+# 
+# # Summarize the count of each unique value in n_visits
+# visits_summary <- visits_check %>%
+#   group_by(n_visits) %>%
+#   summarize(count = n()) %>%
+#   ungroup()
+# 
+# # Create the pie chart
+# pie_chart <- ggplot(visits_summary, aes(x = "", y = count, fill = factor(n_visits))) +
+#   geom_bar(stat = "identity", width = 1) +
+#   coord_polar(theta = "y") +
+#   labs(x = NULL, y = NULL, fill = "Number of Visits", title = "Individuals") +
+#   theme_minimal() +
+#   theme(axis.text.x = element_blank(),
+#         axis.ticks = element_blank(),
+#         panel.grid = element_blank())+
+#   geom_text(aes(label = count), 
+#             position = position_stack(vjust = 0.5))
+# 
+# ggsave("pie_chart_visits.png", pie_chart, dpi = 300, height = 6, width = 8, bg = "white")
 
 
 
@@ -439,7 +439,7 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1){
 MAF <- c(0, 0.01, 0.02, 0.05, 0.075, 0.1, 0.2, 0.3)
 min_reads <- 100
 #number_of_loci <- c(0.995, 0.9925, 0.99, 0.975, 0.95, 0.925, 0.9) # pick loci shared across n% of clean high quality samples for analysis
-number_of_loci <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+number_of_loci <- seq(1:length(unique(merged_dfs$locus)))
 
 infections_percentages <- data.frame(NULL)
 
@@ -467,10 +467,11 @@ infections_percentages <- infections_percentages[,-2]
 benchmark <- ggplot(infections_percentages, aes(x = as.factor(number_of_loci), y = R_percentage, group = as.factor(MAF), color = as.factor(MAF), linetype = as.factor(MAF))) +
   geom_line(size = 1.5, alpha = 0.5) +
   labs(x = "Loci Used", y = "%Recrudescences") +
-  theme_minimal()
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
 benchmark
-ggsave("benchmark_thresholds.png", benchmark, dpi = 300, height = 6, width = 10, bg = "white")
+ggsave("benchmark_thresholds.png", benchmark, dpi = 300, height = 8, width = 30, bg = "white")
 
 
 
