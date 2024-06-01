@@ -32,6 +32,9 @@ allele_data3 <- read.csv("ASINT_NextSeq02_RESULTS_v0.1.8_FILTERED_exclude_file/a
 # merge runs (WHEN ALL RUNS ARE READY)
 allele_data <- rbind(allele_data1, allele_data2, allele_data3)
 
+# #free ram
+# rm(allele_data1, allele_data2, allele_data3)
+# gc()
 
 # reformat NIDA column
 allele_data$sampleID <- sub("_S.*$", "", allele_data$sampleID) #remove _S* from sampleID
@@ -98,7 +101,7 @@ merged_dfs <- merged_dfs[!is.na(merged_dfs$locus),]
 
 ### ANALYSIS FUNCTION !!!
 
-infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1){ 
+infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1, get_outputs = F){ 
   
   #####################################################################################3
   ####### POOL V1 AND V5 VISITS INTO V1V5 #######
@@ -275,50 +278,6 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1){
   
   #####################################################################################3
   
-  #stacked bar plots:
-  
-  #unique(merged_dfs_locifil_allefil$allele)
-  
-  # Convert `Visita` to a factor to ensure proper ordering in the plot
-  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
-    mutate(Visita = factor(Visita, levels = unique(Visita)))
-  
-  merged_dfs_locifil_allefil$Visita
-  
-  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
-    group_by(Visita) %>%
-    arrange(norm.reads.locus, .by_group = TRUE) %>%
-    ungroup()
-  
-  #coloring
-  set.seed(69)
-  num_colors <- length(unique(merged_dfs_locifil_allefil$allele))
-  color_jump <- 1
-  rand_indices <- sample(1:num_colors, num_colors, replace = FALSE)
-  selected_colors <- rainbow(num_colors * color_jump)[rand_indices]
-  
-  # Define the desired order for Visita
-  visita_levels <- c("V1", "V1V5", "V5", "V6", "V7", "V8")
-  
-  # Convert Visita to a factor with the specified levels
-  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
-    mutate(Visita = factor(Visita, levels = visita_levels))
-  
-  
-  stack_bar <- ggplot(merged_dfs_locifil_allefil, aes(x = Visita, y = norm.reads.locus, fill = allele)) +
-    geom_bar(stat = "identity", position = "stack") +
-    labs(x = "Visit", y = "Normalized Reads per Locus", fill = "Allele", title = paste0("MAF = ", MAF, "; Min reads = ", min_reads, "; n loci used = ", number_of_loci)) +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          legend.position = "none")+
-    facet_wrap(~`Numero de estudo`, ncol = 12)+
-    scale_fill_manual(values = selected_colors)
-  
-  #stack_bar
-  
-  ggsave(paste0("stacked_barplot_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", number_of_loci, ".png"), stack_bar, dpi = 300, height = 12, width = 17, bg = "white")
-  
-  
   
   ###### ANALYSIS #######
   
@@ -408,26 +367,70 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1){
   
   R_percentage <- round(sum(na.omit(infection_results$infection_status == "R")) / length(na.omit(infection_results$infection_status)), 2)
   n_good_loci <- length(good_loci)
-  
-  write.csv(infection_results, paste0("infection_results_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", number_of_loci, ".csv"), row.names = F)
-    
-  
-  #visualization
-  allele_Accumulation_status <- merge(allele_Accumulation, infection_results, by=c("Numero de estudo"))
-  
-  csplot <- ggplot(allele_Accumulation_status, aes(x = Visita, y = cumsum_diff_from_previous_counts, group = `Numero de estudo`, color = infection_status)) +
-    geom_line(linewidth = 1.5, alpha = 0.5) +
-    labs(x = "Visit", y = "Allele Accumulation Throughout Visits", title = paste0("MAF = ", MAF, "; Min reads = ", min_reads, "; n loci used = ", length(good_loci))) +
-    theme_minimal() +
-    facet_wrap(~`Numero de estudo`, ncol = 8)
-  
-  #csplot
-  
-  ggsave(paste0("allele_Accumulation_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", number_of_loci, ".png"), csplot, dpi = 300, height = 12, width = 17, bg = "white")
 
+  
+  if (get_outputs == T){
+    
+    #stacked bar plots:
+    
+    #unique(merged_dfs_locifil_allefil$allele)
+    
+    # Convert `Visita` to a factor to ensure proper ordering in the plot
+    merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
+      mutate(Visita = factor(Visita, levels = unique(Visita)))
+    
+    merged_dfs_locifil_allefil$Visita
+    
+    merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
+      group_by(Visita) %>%
+      arrange(norm.reads.locus, .by_group = TRUE) %>%
+      ungroup()
+    
+    #coloring
+    set.seed(69)
+    num_colors <- length(unique(merged_dfs_locifil_allefil$allele))
+    color_jump <- 1
+    rand_indices <- sample(1:num_colors, num_colors, replace = FALSE)
+    selected_colors <- rainbow(num_colors * color_jump)[rand_indices]
+    
+    # Define the desired order for Visita
+    visita_levels <- c("V1", "V1V5", "V5", "V6", "V7", "V8")
+    
+    # Convert Visita to a factor with the specified levels
+    merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
+      mutate(Visita = factor(Visita, levels = visita_levels))
+    
+    
+    stack_bar <- ggplot(merged_dfs_locifil_allefil, aes(x = Visita, y = norm.reads.locus, fill = allele)) +
+      geom_bar(stat = "identity", position = "stack") +
+      labs(x = "Visit", y = "Normalized Reads per Locus", fill = "Allele", title = paste0("MAF = ", MAF, "; Min reads = ", min_reads, "; n loci used = ", number_of_loci)) +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1),
+            legend.position = "none")+
+      facet_wrap(~`Numero de estudo`, ncol = 12)+
+      scale_fill_manual(values = selected_colors)
+    
+    #visualization
+    allele_Accumulation_status <- merge(allele_Accumulation, infection_results, by=c("Numero de estudo"))
+    
+    csplot <- ggplot(allele_Accumulation_status, aes(x = Visita, y = cumsum_diff_from_previous_counts, group = `Numero de estudo`, color = infection_status)) +
+      geom_line(linewidth = 1.5, alpha = 0.5) +
+      labs(x = "Visit", y = "Allele Accumulation Throughout Visits", title = paste0("MAF = ", MAF, "; Min reads = ", min_reads, "; n loci used = ", length(good_loci))) +
+      theme_minimal() +
+      facet_wrap(~`Numero de estudo`, ncol = 8)
+    
+    ggsave(paste0("allele_Accumulation_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", number_of_loci, ".png"), csplot, dpi = 300, height = 12, width = 17, bg = "white")
+    ggsave(paste0("stacked_barplot_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", number_of_loci, ".png"), stack_bar, dpi = 300, height = 12, width = 17, bg = "white")
+    write.csv(infection_results, paste0("infection_results_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", number_of_loci, ".csv"), row.names = F)
+    
+  }
 
   ress <- data.frame(R_percentage = R_percentage, number_of_loci = number_of_loci)
-    
+  
+  # # Remove large intermediate objects if they are not needed anymore
+  # rm(merged_dfs_locifil_allefil, unique_alleles, allele_Accumulation, infection_results, participants, all_elements, element_counts, cs, valid_patients, k, valid_patients)
+  # gc()
+  
   return(ress)
   
 }
@@ -436,26 +439,46 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1){
 
 # PARAMETERS
 
-MAF <- c(0, 0.01, 0.02, 0.05, 0.075, 0.1, 0.2, 0.3)
+MAF <- c(0, 0.01, 0.02, 0.05, 0.1, 0.3)
 min_reads <- 100
 #number_of_loci <- c(0.995, 0.9925, 0.99, 0.975, 0.95, 0.925, 0.9) # pick loci shared across n% of clean high quality samples for analysis
 number_of_loci <- seq(1:length(unique(merged_dfs$locus)))
 
-infections_percentages <- data.frame(NULL)
+# infections_percentages <- data.frame(NULL)
+# 
+# for (maf in MAF) {
+#   for (qgl in number_of_loci) {
+#     
+#     # Call the infection_analysis function with the current values of maf and qgl
+#     ress <- infection_analysis(MAF = maf, min_reads = min_reads, number_of_loci = qgl, get_outputs = F)
+#     
+#     # Create a data frame with the results and the current values of maf and qgl
+#     i_infection_percentages <- cbind(ress, number_of_loci = qgl, MAF = maf)
+#     
+#     # Combine the results into the final data frame
+#     infections_percentages <- rbind(infections_percentages, i_infection_percentages)
+#   }
+# }
+
+results_list <- list()
+index <- 1
 
 for (maf in MAF) {
   for (qgl in number_of_loci) {
-    
     # Call the infection_analysis function with the current values of maf and qgl
-    ress <- infection_analysis(MAF = maf, min_reads = min_reads, number_of_loci = qgl)
+    ress <- infection_analysis(MAF = maf, min_reads = min_reads, number_of_loci = qgl, get_outputs = F)
     
     # Create a data frame with the results and the current values of maf and qgl
     i_infection_percentages <- cbind(ress, number_of_loci = qgl, MAF = maf)
     
-    # Combine the results into the final data frame
-    infections_percentages <- rbind(infections_percentages, i_infection_percentages)
+    # Add the results to the list
+    results_list[[index]] <- i_infection_percentages
+    index <- index + 1
   }
 }
+
+# Combine all results into the final data frame
+infections_percentages <- do.call(rbind, results_list)
 
 infections_percentages
 
@@ -468,10 +491,11 @@ benchmark <- ggplot(infections_percentages, aes(x = as.factor(number_of_loci), y
   geom_line(size = 1.5, alpha = 0.5) +
   labs(x = "Loci Used", y = "%Recrudescences") +
   theme_minimal()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylim(0, NA)
 
 benchmark
-ggsave("benchmark_thresholds.png", benchmark, dpi = 300, height = 8, width = 30, bg = "white")
+ggsave("benchmark_thresholds.png", benchmark, dpi = 300, height = 10, width = 20, bg = "white")
 
 
 
