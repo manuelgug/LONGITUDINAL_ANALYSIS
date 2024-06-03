@@ -32,9 +32,27 @@ metadata <- metadata[metadata$traj_c3_58 != "Ex",] #remove excluded samples
 allele_data1 <- read.csv("BOH22_NextSeq04_RESULTS_v0.1.8_070324_FILTERED/allele_data_global_max_0_filtered.csv")
 allele_data2 <- read.csv("ASINT_NextSeq01_RESULTS_FILTERED/allele_data_global_max_0_filtered.csv")
 allele_data3 <- read.csv("ASINT_NextSeq02_RESULTS_v0.1.8_FILTERED_exclude_file/allele_data_global_max_0_filtered.csv")
+allele_data4 <- read.csv("ASINT_NextSeq03_RESULTS_v0.1.8_FILTERED_excluded_NEGc_controls/allele_data_global_max_0_filtered.csv")
+allele_data5 <- read.csv("ICAE_NextSeq02_RESULTS_v0.1.8_FILTERED/allele_data_global_max_0_filtered.csv")
+
+#samples to keep from particular runs (CARLA)
+# ASINT_NextSeq02, remove LIB08
+a02 <- readxl::read_xlsx("ASINT_NextSEQ02_160424.xlsx")
+a02_remove <- a02[a02$`UDI_Set-Well` == "ASINT_LIB08",]$Sample_Name
+matches <- sapply(a02_remove, function(pattern) grepl(pattern, allele_data3$sampleID)) # Combine the logical vectors across all patterns using `rowSums` to identify any matches
+any_matches <- rowSums(matches) > 0
+allele_data3 <- allele_data3[!any_matches, ] #remove LIB08
+
+# ASINT_NextSeq03, remove LIB07
+a03 <- readxl::read_xlsx("ASINT_NextSEQ03_220524.xlsx")
+a03_remove <- a03[a03$ASINT_NextSEQ03_220524 == "ASINT_LIB07",]$`Pool Name`
+matches <- sapply(a03_remove, function(pattern) grepl(pattern, allele_data4$sampleID)) # Combine the logical vectors across all patterns using `rowSums` to identify any matches
+any_matches <- rowSums(matches) > 0
+allele_data4 <- allele_data4[!any_matches, ] #remove LIB08
+
 
 # merge runs (WHEN ALL RUNS ARE READY)
-allele_data <- rbind(allele_data1, allele_data2, allele_data3)
+allele_data <- rbind(allele_data1, allele_data2, allele_data3, allele_data4, allele_data5)
 
 # #free ram
 # rm(allele_data1, allele_data2, allele_data3)
@@ -500,6 +518,11 @@ for (maf in MAF) {
     # Add the results to the list
     results_list[[index]] <- i_infection_percentages
     index <- index + 1
+    
+    print(maf)
+    print(qgl)
+    print(ress)
+    
   }
 }
 
