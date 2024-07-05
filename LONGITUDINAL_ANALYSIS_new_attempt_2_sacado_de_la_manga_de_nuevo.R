@@ -135,6 +135,9 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1, get
     )) %>%
     ungroup()
   
+  
+  #REMOVE PATIENTS WITHOUT BASELINE
+  
   #identify patients that does have V1, V5 or V1V5
   valid_patients <- merged_dfs_locifil_allefil %>%
     filter(Visita %in% c("V1", "V5", "V1V5")) %>%
@@ -145,9 +148,6 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1, get
   merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
     filter(`Numero de estudo` %in% valid_patients)
 
-  
-  
-  
   #sum reads for each allele (needed because of the merging of some V1V5)
   merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
     group_by(`Numero de estudo`, Visita, locus, Category, allele, pseudo_cigar) %>%
@@ -211,48 +211,53 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1, get
   ##################################################################################
   ### FOR NON V1 AND/OR V5, KEEP ONLY MAJOR ALLELE
   
-  # Filter and keep rows with highest norm.reads.locus for each group
+  # Filter and keep rows with highest norm.reads.locus (major allele) for each group other than the baseline
   non_V1V5_DATA <- merged_dfs_locifil_allefil %>%
     filter(!Visita %in% c("V1", "V5", "V1V5")) %>%
     group_by(`Numero de estudo`, locus, Visita) %>%
     slice(which.max(norm.reads.locus)) %>%
     ungroup()
   
-  # Bind back the rows with V1, V5, and V1V5 visits
+  ####### POOL V6 TO V8 VISITS INTO V6V7V8 ####### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  non_V1V5_DATA <- non_V1V5_DATA %>%
+    group_by(`Numero de estudo`) %>%
+    mutate(Visita = case_when(
+      all(c("V6", "V7", "V8") %in% Visita) ~ ifelse(Visita %in% c("V6", "V7", "V8"), "V6V7V8", Visita),
+      all(c("V6", "V7") %in% Visita) & !("V8" %in% Visita) ~ ifelse(Visita %in% c("V6", "V7"), "V6V7", Visita),
+      all(c("V7", "V8") %in% Visita) & !("V6" %in% Visita) ~ ifelse(Visita %in% c("V7", "V8"), "V7V8", Visita),
+      all(c("V6", "V8") %in% Visita) & !("V7" %in% Visita) ~ ifelse(Visita %in% c("V6", "V8"), "V6V8", Visita),
+      TRUE ~ Visita
+    )) %>%
+    ungroup()
+  
+  
+  #sum reads for each allele (needed because of the merging of some V6V7V8)
+  non_V1V5_DATA <- non_V1V5_DATA %>%
+    group_by(`Numero de estudo`, Visita, locus, Category, allele, pseudo_cigar) %>%
+    summarize(reads = sum(reads))
+  
+  # recalculate in-sample allele freqs
+  m <- non_V1V5_DATA %>%
+    group_by(`Numero de estudo`,Visita,locus,Category) %>%
+    summarize(norm.reads.locus = reads / sum(reads))
+  
+  non_V1V5_DATA <- cbind(m, non_V1V5_DATA[c("allele", "pseudo_cigar", "reads")])
+  
+  #pseudo nida for easier data handling
+  non_V1V5_DATA$NIDA <- paste0(non_V1V5_DATA$`Numero de estudo`, "_", non_V1V5_DATA$Visita)
+  
+  
+  
+  # Bind back the LAST VISITS rows with V1, V5, and V1V5 visits
   merged_dfs_locifil_allefil <- bind_rows(
     non_V1V5_DATA,
     merged_dfs_locifil_allefil %>% filter(Visita %in% c("V1", "V5", "V1V5"))
   )
   ##################################################################################
   
+
   
-  ####### POOL V6 TO V8 VISITS INTO V6V7V8 #######
-  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
-    group_by(`Numero de estudo`) %>%
-    mutate(Visita = case_when(
-      any(Visita == "V6") & any(Visita == "V7") & any(Visita == "V8") ~ ifelse(Visita %in% c("V6", "V7", "V8"), "V6V7V8", Visita),
-      TRUE ~ Visita
-    )) %>%
-    ungroup()
-  
-  
-  #sum reads for each allele (needed because of the merging of some V1V5)
-  merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
-    group_by(`Numero de estudo`, Visita, locus, Category, allele, pseudo_cigar) %>%
-    summarize(reads = sum(reads))
-  
-  # recalculate in-sample allele freqs
-  k<- merged_dfs_locifil_allefil %>% 
-    group_by(`Numero de estudo`,Visita,locus,Category) %>%
-    summarize(norm.reads.locus = reads / sum(reads))
-  
-  merged_dfs_locifil_allefil <- cbind(k, merged_dfs_locifil_allefil[c("allele", "pseudo_cigar", "reads")])
-  
-  #pseudo nida for easier data handling
-  merged_dfs_locifil_allefil$NIDA <- paste0(merged_dfs_locifil_allefil$`Numero de estudo`, "_", merged_dfs_locifil_allefil$Visita)
-  
-  
-  ## keep only first and last times for each patient
+  ## order visits by name
   merged_dfs_locifil_allefil<- merged_dfs_locifil_allefil %>%
     group_by(`Numero de estudo`) %>%
     arrange(`Numero de estudo`, Visita) %>%
@@ -263,6 +268,7 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1, get
     group_by(`Numero de estudo`) %>%
     filter(Visita == first(Visita) | Visita == last(Visita)) %>%
     ungroup()
+  
   
   # ###### 2) SAMPLE FILTERING #######
   # unique_loci_list <- merged_dfs_locifil_allefil %>%
@@ -319,11 +325,11 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1, get
   common_loci <- Reduce(intersect, unique_loci_list$unique_loci_list) #no common loci across all visits/patients....
   
   # # keep loci present in at least 95% of samples (visits)
-  # threshold <- round(0.95 * length(unique(merged_dfs_locifil_allefil$NIDA))) 
-  # good_loci <- as.character(element_counts[element_counts$Freq >= threshold,]$all_elements)
+  threshold <- round(0.95 * length(unique(merged_dfs_locifil_allefil$NIDA))) 
+  good_loci <- as.character(element_counts[element_counts$Freq >= threshold,]$all_elements)
   
   #choose loci based on most shared by samples
-  good_loci <- as.character(element_counts$all_elements[1:number_of_loci])
+  #good_loci <- as.character(element_counts$all_elements[1:number_of_loci])
   
   #ama-1 as only good locus
   #good_loci <- "Pf3D7_11_v3-1294284-1294580-1B"
@@ -459,8 +465,6 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1, get
     merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
       mutate(Visita = factor(Visita, levels = unique(Visita)))
     
-    merged_dfs_locifil_allefil$Visita
-    
     merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
       group_by(Visita) %>%
       arrange(norm.reads.locus, .by_group = TRUE) %>%
@@ -474,7 +478,7 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1, get
     selected_colors <- rainbow(num_colors * color_jump)[rand_indices]
     
     # Define the desired order for Visita
-    visita_levels <- c("V1", "V1V5", "V5", "V6", "V7", "V8", "V6V7V8")
+    visita_levels <- c("V1", "V1V5", "V5", "V6", "V7", "V8", "V6V7", "V6V8", "V7V8", "V6V7V8")
     
     # Convert Visita to a factor with the specified levels
     merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
@@ -483,12 +487,15 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1, get
     
     stack_bar <- ggplot(merged_dfs_locifil_allefil, aes(x = Visita, y = norm.reads.locus, fill = allele)) +
       geom_bar(stat = "identity", position = "stack") +
-      labs(x = "Visit", y = "Normalized Reads per Locus", fill = "Allele", title = paste0("MAF = ", MAF, "; Min reads = ", min_reads, "; n loci used = ", number_of_loci)) +
+      labs(x = "Visit", y = "n alleles", fill = "Allele", title = paste0("MAF = ", MAF, "; Min reads = ", min_reads, "; n loci used = ", number_of_loci)) +
       theme_minimal() +
       theme(axis.text.x = element_text(angle = 45, hjust = 1),
-            legend.position = "none")+
-      facet_wrap(~`Numero de estudo`, ncol = 12)+
-      scale_fill_manual(values = selected_colors)
+            axis.ticks.y = element_blank(),
+            axis.text.y = element_blank(),
+            legend.position = "none") +
+      facet_wrap(~`Numero de estudo`, ncol = 12) +
+      scale_fill_manual(values = selected_colors) +
+      scale_y_continuous(breaks = function(x) seq(floor(min(x)), ceiling(max(x)), by = 2))
     
     #visualization
     allele_Accumulation_status <- merge(allele_Accumulation, infection_results, by=c("Numero de estudo"))
@@ -501,7 +508,7 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1, get
       facet_wrap(~`Numero de estudo`, ncol = 8)
     
     ggsave(paste0("allele_Accumulation_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", number_of_loci, ".png"), csplot, dpi = 300, height = 12, width = 17, bg = "white")
-    ggsave(paste0("stacked_barplot_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", number_of_loci, ".png"), stack_bar, dpi = 300, height = 12, width = 17, bg = "white")
+    ggsave(paste0("stacked_barplot_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", number_of_loci, ".png"), stack_bar, dpi = 300, height = 24, width = 34, bg = "white")
     write.csv(infection_results, paste0("infection_results_MAF_", MAF, "_minreads_", min_reads, "_lociThreshold_", number_of_loci, ".csv"), row.names = F)
     
     # free ram
