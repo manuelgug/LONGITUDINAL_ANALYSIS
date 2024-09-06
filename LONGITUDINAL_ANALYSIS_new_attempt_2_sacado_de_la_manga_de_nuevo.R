@@ -84,6 +84,18 @@ missing_nidas <- unique(missing$NIDA)
 #remove missing NIDAs from data
 merged_dfs <- merged_dfs[!is.na(merged_dfs$locus),]
 
+LOCUS_SEQUENCED <- merged_dfs %>%
+  group_by(NIDA) %>%
+  summarize(locus_sequenced = length(unique(locus))) %>%
+  arrange(locus_sequenced)
+
+LOCUS_SEQUENCED<- merge(LOCUS_SEQUENCED, metadata, by = "NIDA")
+
+LOCUS_SEQUENCED <- LOCUS_SEQUENCED %>%
+  select(`Numero de estudo`, Visita, NIDA, locus_sequenced) %>%
+  arrange(locus_sequenced)
+
+write.csv(LOCUS_SEQUENCED, "locus_sequenced_asintmal.csv")
 
 # # Generate a summary of visits for each `Numero de estudo`
 # visits_check <- merged_dfs %>%
@@ -218,14 +230,11 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1, get
     slice(which.max(norm.reads.locus)) %>%
     ungroup()
   
-  ####### POOL V6 TO V8 VISITS INTO V6V7V8 ####### !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ####### POOL V6 TO V8 VISITS INTO V6V7V8 #######
   non_V1V5_DATA <- non_V1V5_DATA %>%
     group_by(`Numero de estudo`) %>%
     mutate(Visita = case_when(
-      all(c("V6", "V7", "V8") %in% Visita) ~ ifelse(Visita %in% c("V6", "V7", "V8"), "V6V7V8", Visita),
-      all(c("V6", "V7") %in% Visita) & !("V8" %in% Visita) ~ ifelse(Visita %in% c("V6", "V7"), "V6V7", Visita),
-      all(c("V7", "V8") %in% Visita) & !("V6" %in% Visita) ~ ifelse(Visita %in% c("V7", "V8"), "V7V8", Visita),
-      all(c("V6", "V8") %in% Visita) & !("V7" %in% Visita) ~ ifelse(Visita %in% c("V6", "V8"), "V6V8", Visita),
+      any(Visita == "V6") & any(Visita == "V7") & any(Visita == "V8") ~ ifelse(Visita %in% c("V6", "V7", "V8"), "V6V7V8", Visita),
       TRUE ~ Visita
     )) %>%
     ungroup()
@@ -478,7 +487,7 @@ infection_analysis <- function(MAF = 0, min_reads = 100, number_of_loci = 1, get
     selected_colors <- rainbow(num_colors * color_jump)[rand_indices]
     
     # Define the desired order for Visita
-    visita_levels <- c("V1", "V1V5", "V5", "V6", "V7", "V8", "V6V7", "V6V8", "V7V8", "V6V7V8")
+    visita_levels <- c("V1", "V1V5", "V5", "V6", "V7", "V8", "V6V7V8")
     
     # Convert Visita to a factor with the specified levels
     merged_dfs_locifil_allefil <- merged_dfs_locifil_allefil %>%
